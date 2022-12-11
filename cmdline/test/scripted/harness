@@ -1,0 +1,84 @@
+#!/bin/bash -x
+#
+# Licensed to the Apache Software Foundation (ASF) under one or more
+# contributor license agreements.  See the NOTICE file distributed with
+# this work for additional information regarding copyright ownership.
+# The ASF licenses this file to You under the Apache License, Version 2.0
+# (the "License"); you may not use this file except in compliance with
+# the License.  You may obtain a copy of the License at
+#
+# http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
+
+. config
+
+if [ "$TOOL_NAME" == "" ] ; then
+    echo "tool not specified" >&2
+    exit 1;
+fi;
+
+TEST_NAME=`basename $0`
+BUILD_DIR=`cd ../../../build; pwd`
+WORK_DIR=$BUILD_DIR/test/scripted/work/$TEST_NAME
+RESULTS_DIR=$BUILD_DIR/test/scripted/results
+RESULT_FILE=$RESULTS_DIR/TEST-$TEST_NAME.xml
+COMPILER_ZIP=$BUILD_DIR/"$TOOL_NAME".zip
+
+rm -rf $WORK_DIR
+mkdir -p $WORK_DIR
+mkdir -p `dirname $RESULT_FILE`
+cd $WORK_DIR
+unzip -q $COMPILER_ZIP
+
+mkdir -p build
+
+create_file() {
+    mkdir -p `dirname $1`
+    cat >$1 -
+}
+
+assert_file_content() {
+     DIFF_OUTPUT=`diff $1 - 2>&1`;
+     if [ $? != 0 ] ; then
+         write_failure_results_file "$DIFF_OUTPUT"
+        exit 1;
+     fi;
+}
+
+fail() {
+    write_failure_results_file $1;
+}
+
+write_passed_results_file() {
+      cat >$RESULT_FILE <<EOF
+<?xml version="1.0" encoding="UTF-8" ?>
+<testsuite errors="0" failures="0" hostname="foo" name="$TEST_NAME" tests="1" time="0" timestamp="`date`">
+  <properties/>
+  <testcase classname="$TEST_NAME" name="main" time="0" />
+</testsuite>
+EOF
+}
+
+write_failure_results_file() {
+      ESCAPED_CONTENT=`echo $X | sed -e 's/&/\&amp;/g' | sed -e 's/</\&lt;/g'`;
+      cat >$RESULT_FILE <<EOF
+<?xml version="1.0" encoding="UTF-8" ?>
+<testsuite errors="0" failures="1" hostname="foo" name="$TEST_NAME" tests="1" time="0" timestamp="`date`">
+  <properties/>
+  <testcase classname="$TEST_NAME" name="main" time="0">
+    <failure message="Test failed" type="junit.framework.AssertionFailedError">$ESCAPED_CONTENT</failure>
+  </testcase>
+</testsuite>
+EOF
+}
+
+perform_test;
+write_passed_results_file;
+
+exit 0

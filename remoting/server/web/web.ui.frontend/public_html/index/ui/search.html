@@ -1,0 +1,44 @@
+<!--
+
+  Licensed to the Apache Software Foundation (ASF) under one or more
+  contributor license agreements.  See the NOTICE file distributed with
+  this work for additional information regarding copyright ownership.
+  The ASF licenses this file to You under the Apache License, Version 2.0
+  (the "License"); you may not use this file except in compliance with
+  the License.  You may obtain a copy of the License at
+
+  http://www.apache.org/licenses/LICENSE-2.0
+
+  Unless required by applicable law or agreed to in writing, software
+  distributed under the License is distributed on an "AS IS" BASIS,
+  WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+  See the License for the specific language governing permissions and
+  limitations under the License.
+-->
+<form ng-submit="performQuery()">
+    <input class="search-query" ng-model="prefix" type="text" name="prefix" placeholder="Search" id="search-input"/><!--ng-change="performQueryDelayed()" -->
+    <button class="btn" type="submit">Search</button>
+</form>
+<label>Projects:</label>
+<input ng-model="$parent.allProjectsCheckBox" ng-change="$parent.allProjectsCheckBoxChanged()" type="checkbox" checked="yes">All</input>
+<span class="project-checkboxes" ng-repeat="project in $parent.projects">
+    <input class="projectCheckBox" type='checkbox' ng-model="project.selected" name="path" ng-change="$parent.projectCheckBoxChanged()" id="projectCheckBox-{{project.id}}">{{project.displayName}}</input>
+</span>
+<br>
+<span>
+    Show:
+    <input type='checkbox' ng-model="showTypes" id="showTypes">Types</input>
+    <input type='checkbox' ng-model="showFields" id="showFields">Fields</input>
+    <input type='checkbox' ng-model="showMethods" id="showMethods">Methods</input>
+    <input type='checkbox' ng-model="showOthers" id="showOthers">Others</input>
+</span>
+<table width="100%">
+    <tr ng-repeat="symbolsDescription in searchResult" ng-show="projects.get(symbolsDescription.project.id).selected==true && acceptByKind(symbolsDescription.kind, showFields, showTypes, showMethods, showOthers)" id="{{symbolsDescription.project.id}}"> <!--projects[symbolsDescription.projectId].neco==true">-->
+        <td style="vertical-align: top">
+            <img src="/index/icons/{{getElementIcon(symbolsDescription.kind, symbolsDescription.modifiers)}}" alt="{{symbolsDescription.kind}}"/>
+        </td><td>
+            <a href="#/showCode?path={{symbolsDescription.project.id}}&relative={{symbolsDescription.file}}&goto={{symbolSignature(symbolsDescription)}}">{{symbolsDescription.displayName}}</a> in {{symbolsDescription.enclosingFQN}}
+        </td>
+        <td  align="right">{{symbolsDescription.project.displayName.replace("&", "&amp;").replace("<", "&lt;").replace(" ", "&nbsp;")}}</td>
+    </tr>
+</table>

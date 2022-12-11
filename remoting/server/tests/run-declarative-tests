@@ -1,0 +1,84 @@
+#!/bin/bash -x
+
+# Licensed to the Apache Software Foundation (ASF) under one or more
+# contributor license agreements.  See the NOTICE file distributed with
+# this work for additional information regarding copyright ownership.
+# The ASF licenses this file to You under the Apache License, Version 2.0
+# (the "License"); you may not use this file except in compliance with
+# the License.  You may obtain a copy of the License at
+#
+# http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
+
+do_index() {
+    rm -rf cache
+    mkdir -p cache
+    for g in `pwd`/data/*; do
+        NAME=`basename $g`;
+        PROJECTS=`find $PWD/data/group1/ -maxdepth 1 -mindepth 1 -type d`
+        USERDIR="`pwd`/cache/userdir"
+        rm -rf "$USERDIR"
+        (cd ../indexer; ant "-Drun.args=--nosplash --nogui -J-Xmx128m --category-id '$NAME' --category-name '$NAME-display-name' --cache-target ../tests/cache/temp.zip --category-root-dir '$g' --category-projects '$PROJECTS'" "-Dtest.user.dir=$USERDIR" "$@" run)
+        (cd cache; unzip temp.zip; rm temp.zip)
+        rm -rf "$USERDIR"
+    done
+}
+
+#XXX: copied from cmdline/test/scripted/harness
+write_passed_results_file() {
+      cat >$RESULT_FILE <<EOF
+<?xml version="1.0" encoding="UTF-8" ?>
+<testsuite errors="0" failures="0" hostname="foo" name="$TEST_NAME" tests="1" time="0" timestamp="`date`">
+  <properties/>
+  <testcase classname="$TEST_NAME" name="main" time="0" />
+</testsuite>
+EOF
+}
+
+write_failure_results_file() {
+      cat >$RESULT_FILE <<EOF
+<?xml version="1.0" encoding="UTF-8" ?>
+<testsuite errors="0" failures="1" hostname="foo" name="$TEST_NAME" tests="1" time="0" timestamp="`date`">
+  <properties/>
+  <testcase classname="$TEST_NAME" name="main" time="0">
+    <failure message="Test failed" type="junit.framework.AssertionFailedError"><![CDATA[$1]]></failure>
+  </testcase>
+</testsuite>
+EOF
+}
+
+do_index "$@"
+
+(cd ../web/web.main; ant jar)
+OUT=`mktemp`;
+trap "rm $OUT" EXIT
+java -jar ../web/web.main/dist/web.main.jar --port 0 cache >"$OUT" &
+
+trap "kill %1" EXIT
+
+while [ -z "$PORT" ] ; do
+     sleep 1s;
+     PORT=`cat "$OUT" | grep "Running on port: " | cut -d ':' -f 2 | tr -d ' '`;
+done
+
+rm -rf results
+mkdir results
+
+for tc in `find testcases -name "*.tc" -type d`; do
+    REQUEST=`cat $tc/request | grep -v '^#'`;
+    TEST_NAME=`echo ${tc#testcases/} | tr '/' '-'`;
+    RESULT_FILE="`pwd`/results/TEST-$TEST_NAME.xml"
+    if wget -O - "http://localhost:${PORT}$REQUEST" | diff -w - $tc/response; then
+        write_passed_results_file
+    else
+        write_failure_results_file
+    fi;
+done
+
+exit 0

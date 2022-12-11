@@ -1,0 +1,53 @@
+#!/bin/bash
+#
+# Licensed to the Apache Software Foundation (ASF) under one or more
+# contributor license agreements.  See the NOTICE file distributed with
+# this work for additional information regarding copyright ownership.
+# The ASF licenses this file to You under the Apache License, Version 2.0
+# (the "License"); you may not use this file except in compliance with
+# the License.  You may obtain a copy of the License at
+#
+# http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
+
+perform_test() {
+    create_file src/test/Test.java <<EOF
+package test;
+public class Test {
+    private void test() {
+        String s = "foo".intern();
+    }
+}
+EOF
+    create_file build.xml <<"EOF"
+<?xml version="1.0" encoding="UTF-8"?>
+<project name="test" default="run" basedir=".">
+    <target name="run">
+        <fail unless="jackpot.home">${jackpot.home} must be specified</fail>
+        <taskdef name="jackpot" classname="org.netbeans.modules.jackpot30.cmdline.ant.JackpotTask" classpath="${jackpot.home}/jackpot-ant.jar"/>
+        <jackpot jackpotHome="${jackpot.home}">
+            <src>
+                <pathelement path="src" />
+            </src>
+        </jackpot>
+    </target>
+</project>
+EOF
+    create_file src/META-INF/upgrade/test.hint <<"EOF"
+$1.intern();;
+EOF
+
+    run_ant >output
+
+    if grep <output 'warning: \[test\] test' >/dev/null 2>/dev/null; then
+        fail "does not contain required output";
+    fi;
+}
+
+. `dirname $0`/harness

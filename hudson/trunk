@@ -1,0 +1,88 @@
+#!/bin/bash -x
+
+# Licensed to the Apache Software Foundation (ASF) under one or more
+# contributor license agreements.  See the NOTICE file distributed with
+# this work for additional information regarding copyright ownership.
+# The ASF licenses this file to You under the Apache License, Version 2.0
+# (the "License"); you may not use this file except in compliance with
+# the License.  You may obtain a copy of the License at
+#
+# http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
+
+prepare_platform() {
+if [ "$TRUNK_URL" == "" ] ; then
+    TRUNK_URL="http://deadlock.netbeans.org/hudson/job/nbms-and-javadoc";
+fi;
+
+TRUNK_ID=`wget -q $TRUNK_URL/lastSuccessfulBuild/buildNumber -O -`
+
+mkdir -p nbbuild
+
+cd nbbuild
+rm -rf netbeans
+mkdir netbeans
+mkdir -p download
+
+rm `ls download/netbeans-hudson-trunk* | grep -v $TRUNK_ID`
+
+cd netbeans
+
+download_and_unpack_cluster() {
+    if [ ! -e ../download/netbeans-hudson-trunk-$TRUNK_ID-$1.zip ] ; then
+        wget -q -N $TRUNK_URL/$TRUNK_ID/artifact/nbbuild/dist/hudson-nbms-and-javadoc-$TRUNK_ID-$1.zip -O ../download/netbeans-hudson-trunk-$TRUNK_ID-$1.zip || exit
+    fi;
+    unzip -q ../download/*$TRUNK_ID-$1.zip || exit
+}
+
+for cluster in ide extide platform java harness nb apisupport enterprise cnd dlight websvccommon; do
+    download_and_unpack_cluster $cluster;
+done
+
+cd ../..
+
+PLATFORM=$PWD/nbbuild/netbeans
+
+ant -f hudson/download-extra-nbms.xml -Dnbplatform.default.harness.dir=$PLATFORM/harness -Dnbplatform.default.netbeans.dest.dir=$PLATFORM
+}
+
+if [ "$PLATFORM" == "" ] ; then
+    prepare_platform
+fi;
+
+ant -Dnbplatform.active.dir=$PLATFORM -f lib/download.xml download copy-from-platform
+
+SUBPROJECTS="remoting duplicates language cmdline";
+
+for subproject in $SUBPROJECTS; do
+    (cd $subproject; ./build.sh -Dnbplatform.default.harness.dir=$PLATFORM/harness -Dnbplatform.default.netbeans.dest.dir=$PLATFORM -Dnbplatform.active.dir=$PLATFORM) || exit 1
+done
+
+for subproject in language remoting; do
+    if [ -x $subproject/post-build.sh ] ; then
+        (cd $subproject; ./post-build.sh -Dnbplatform.default.harness.dir=$PLATFORM/harness -Dnbplatform.default.netbeans.dest.dir=$PLATFORM -Dnbplatform.active.dir=$PLATFORM) || exit 1
+    fi;
+done
+
+mkdir -p build/updates
+
+NBMS_SUBPROJECTS="remoting language duplicates";
+
+cp `find $NBMS_SUBPROJECTS -type f -name "*.nbm"` build/updates
+ant -Dnbplatform.default.harness.dir=$PLATFORM/harness -Dnbplatform.default.netbeans.dest.dir=$PLATFORM -Dnbplatform.active.dir=$PLATFORM -Ddist.base=$DIST_BASE build-auc || exit 1
+gzip <build/updates/updates.xml >build/updates/updates.xml.gz
+
+JACKPOT_ANALYSIS_SUBPROJECTS="remoting/common remoting/ide remoting/server/indexer duplicates/ide cmdline language/ide"
+JACKPOT_TOOL=`pwd`/cmdline/tool/build/jackpot
+echo "$JACKPOT_TOOL"
+for subproject in $JACKPOT_ANALYSIS_SUBPROJECTS; do
+    (cd $subproject; ant -Dnbplatform.default.harness.dir=$PLATFORM/harness -Dnbplatform.default.netbeans.dest.dir=$PLATFORM -Dnbplatform.active.dir=$PLATFORM -Djackpot.home="$JACKPOT_TOOL" jackpot) || exit 1
+done
+
+exit 0
